@@ -3,6 +3,9 @@ import {
   CreateCompletionResponseUsage,
   OpenAIApi,
 } from 'openai';
+import {
+  HyperCLOVAApi
+} from './hyperclova.api'
 import { useAppState } from '../state/store';
 import { availableActions } from './availableActions';
 import { ParsedResponseSuccess } from './parseResponse';
@@ -32,6 +35,8 @@ This is an example of an action:
 
 You must always include the <Thought> and <Action> open/close tags or else your response will be marked as invalid.`;
 
+const HC_MODELS = ['sft-alpha-hli']
+
 export async function performQuery(
   taskInstructions: string,
   previousActions: ParsedResponseSuccess[],
@@ -42,20 +47,29 @@ export async function performQuery(
   const model = useAppState.getState().settings.selectedModel;
   const prompt = formatPrompt(taskInstructions, previousActions, simplifiedDOM);
   const key = useAppState.getState().settings.openAIKey;
-  if (!key) {
+  const isHyperCLOVARequest = HC_MODELS.includes(model)
+
+  if (!isHyperCLOVARequest && !key) {
     notifyError?.('No OpenAI key found');
     return null;
   }
+  let api: OpenAIApi | HyperCLOVAApi
 
-  const openai = new OpenAIApi(
-    new Configuration({
-      apiKey: key,
-    })
-  );
+  if (key && !isHyperCLOVARequest) {
+    api = new OpenAIApi(
+      new Configuration({
+        apiKey: key,
+      })
+    )
+  } else {
+    api = new HyperCLOVAApi(
+      new Configuration({})
+    )
+  }
 
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      const completion = await openai.createChatCompletion({
+      const completion = await api.createChatCompletion({
         model: model,
         messages: [
           {
