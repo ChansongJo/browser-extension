@@ -3,33 +3,28 @@
  * for a coherent interface with openai api
  */
 
-import {
-  Configuration,
+import type { Configuration } from './configuration';
+import type {
   CreateChatCompletionRequest,
   CreateChatCompletionResponse,
-} from 'openai';
+} from 'openai/api'
 import type { AxiosPromise, AxiosInstance, AxiosRequestConfig } from 'axios';
 import globalAxios from 'axios';
-import { BaseAPI } from 'openai/base';
-import type { RequestArgs } from 'openai/base';
-import { DUMMY_BASE_URL, assertParamExists, setApiKeyToObject, setBasicAuthToObject, setBearerAuthToObject, setOAuthToObject, setSearchParams, serializeDataIfNeeded, toPathString, createRequestFunction } from 'openai/common';
+import type { RequestArgs } from './base';
+import { DUMMY_BASE_URL, assertParamExists, serializeDataIfNeeded, toPathString, createRequestFunction, setSearchParams } from './common';
 
-type HyperclovaModelType = 'sft-alpha-hli' | string
-const BASE_PATH = 'https://clops-inference.clova.ai/chatgpt'
+const BASE_PATH = 'http://playground.nap.svc.ad1.io.navercorp.com'
+
+const collectTextFromMessage = (messages: {role: string, content: string}[]) => {
+  return messages.map(item => item.content).concat(["<Thought>"]).join("\n")
+}
 
 export const HyperCLOVAApiAxiosParamCreator = function (configuration?: Configuration) {
   return {
-      /**
-       * 
-       * @summary Creates a completion for the chat message
-       * @param {CreateChatCompletionRequest} createChatCompletionRequest 
-       * @param {*} [options] Override http request option.
-       * @throws {RequiredError}
-       */
       createChatCompletion: async (createChatCompletionRequest: CreateChatCompletionRequest, options: AxiosRequestConfig = {}): Promise<RequestArgs> => {
           // verify required parameter 'createChatCompletionRequest' is not null or undefined
           assertParamExists('createChatCompletion', 'createChatCompletionRequest', createChatCompletionRequest)
-          const localVarPath = `/${createChatCompletionRequest.model}/completions`;
+          const localVarPath = `/api/completions`;
           // use dummy base URL string because the URL constructor only accepts absolute URLs.
           const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
           let baseOptions;
@@ -48,12 +43,23 @@ export const HyperCLOVAApiAxiosParamCreator = function (configuration?: Configur
           localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
           // request data swap
           // message merging... -> simple merge 
-          let text = createChatCompletionRequest.messages.map(item => `${item.role}: ${item.content}`).concat("\n")
+          let text = collectTextFromMessage(createChatCompletionRequest.messages)
+          console.log('text', text)
           const hcCompletionRequest = {
             text,
+            playground_tracker: {
+              user_deptnm: "Dialog Service",
+              user_id: "KR20231",
+              user_language: "ko_KR",
+              user_name: "조찬송"
+            },
+            model: createChatCompletionRequest.model,
             max_tokens: createChatCompletionRequest.max_tokens,
-            temparature: createChatCompletionRequest.temperature,
-            stop_before: createChatCompletionRequest.stop
+            temperature: createChatCompletionRequest.temperature,
+            stop_before: createChatCompletionRequest.stop,
+            top_k: 0,
+            top_p: 0.8,
+            repetition_penalty: 5
           }
 
           localVarRequestOptions.data = serializeDataIfNeeded(hcCompletionRequest, localVarRequestOptions, configuration)
@@ -88,9 +94,18 @@ export const HyperCLOVAApiiFp = (configuration?: Configuration) => {
 }
 
 
-export class HyperCLOVAApi extends BaseAPI {
+export class HyperCLOVAApi {
+  protected configuration: Configuration | undefined;
+
+  constructor(configuration?: Configuration, protected basePath: string = BASE_PATH, protected axios: AxiosInstance = globalAxios) {
+    if (configuration) {
+        this.configuration = configuration;
+        this.basePath = configuration.basePath || this.basePath;
+    }
+  }
+
   public async createChatCompletion(createChatCompletionRequest: CreateChatCompletionRequest, options?: AxiosRequestConfig) {
-    let text = createChatCompletionRequest.messages.map(item => `${item.role}: ${item.content}`).concat("\n")
+    const text = collectTextFromMessage(createChatCompletionRequest.messages)
     return HyperCLOVAApiiFp(this.configuration).createChatCompletion(createChatCompletionRequest, options)
       .then((request) => request(this.axios, this.basePath))
       .then((resp) => ({
@@ -105,7 +120,7 @@ export class HyperCLOVAApi extends BaseAPI {
             total_tokens: resp.data.input_length + resp.data.output_length,
           },
           choices: [
-            {message: {role: 'system', content: resp.data.text.slice(text.length)}}
+            {message: {role: 'system', content: "<Thought>".concat(resp.data.text.slice(text.length))}}
           ],
           model: createChatCompletionRequest.model,
 

@@ -35,7 +35,7 @@ This is an example of an action:
 
 You must always include the <Thought> and <Action> open/close tags or else your response will be marked as invalid.`;
 
-const HC_MODELS = ['sft-alpha-hli']
+const HC_MODELS = ['sft-alpha-hli', 'prod-moon-mu-000']
 
 export async function performQuery(
   taskInstructions: string,
